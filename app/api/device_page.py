@@ -1,11 +1,13 @@
-"""Hosted browser page for device sign-in. Uses Clerk's browser SDK with the publishable key only."""
+"""SAGE's custom Google sign-in bridge. No hosted signup forms or pairing-code UI."""
 import html
+import json
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
 from app.core.config import get_settings
 from app.integrations.clerk_api import _frontend_api_from_publishable_key
+from app.services import device_auth
 
 router = APIRouter(include_in_schema=False)
 
@@ -13,79 +15,82 @@ PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in to SAGE AI</title>
 <style>
- :root{--bg:#0f0e17;--card:#1a1826;--ink:#f3f2f8;--mut:#a7a3bd;--acc:#8b5cf6;--ok:#22c55e;--bad:#ef4444}
- @media (prefers-color-scheme: light){:root{--bg:#f6f5fb;--card:#fff;--ink:#16141f;--mut:#5d5972}}
- *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
- font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
- .card{width:100%;max-width:440px;background:var(--card);border-radius:18px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
- h1{font-size:22px;margin:0 0 6px}p{color:var(--mut);margin:0 0 16px}
- .code{font:700 28px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-align:center;padding:16px;border-radius:12px;
- background:rgba(139,92,246,.12);color:var(--acc);margin:12px 0 18px}
- button{width:100%;height:46px;border:0;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer}
- .go{background:var(--acc);color:#fff}.no{background:transparent;color:var(--mut);margin-top:8px}
- .ok{color:var(--ok)}.bad{color:var(--bad)}#signin{display:flex;justify-content:center}
-</style></head>
-<body><main class="card">
- <h1>Sign in to SAGE AI</h1>
- <p id="lead">Confirm this code matches the one shown in your SAGE app.</p>
- <div class="code">__CODE__</div>
- <div id="signin"></div>
- <div id="approve" hidden>
-   <p id="who"></p>
-   <button class="go" id="yes">Approve sign-in on __CLIENT__</button>
-   <button class="no" id="nope">This wasn't me</button>
- </div>
- <p id="msg" role="status"></p>
-</main>
-<script>
- const CODE = "__CODE__";
- const msg = (t, cls) => { const m = document.getElementById('msg'); m.textContent = t; m.className = cls || '' };
- async function decide(approve) {
-   try {
-     const token = await window.Clerk.session.getToken();
-     const r = await fetch('/v1/auth/device/' + (approve ? 'approve' : 'deny'), {method: 'POST',
-       headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + token}, body: JSON.stringify({user_code: CODE})});
-     const d = await r.json();
-     document.getElementById('approve').hidden = true;
-     if (!r.ok) {
-       const c = d.error && d.error.code;
-       msg(c === 'not_on_waitlist' ? "This email isn't on the SAGE AI beta list yet. Sign in with the email you joined the waitlist with."
-                                  : (d.error && d.error.message) || 'Something went wrong', 'bad');
-       if (c === 'not_on_waitlist') setTimeout(() => window.Clerk.signOut().then(() => location.reload()), 4000);
-       return;
-     }
-     msg(approve ? 'Approved. You can return to the SAGE app — it will finish signing in automatically.' : 'Sign-in request denied.', approve ? 'ok' : '');
-   } catch (e) { msg('Network error — please retry.', 'bad') }
- }
- async function render() {
-   const s = await (await fetch('/v1/auth/device/' + encodeURIComponent(CODE))).json().catch(() => null);
-   if (!s || s.status !== 'pending') { msg(s && s.status === 'expired' ? 'This code has expired. Start sign-in again from the app.' :
-                                            'This code is no longer valid. Start sign-in again from the app.', 'bad'); return; }
-   if (window.Clerk.user) {
-     document.getElementById('signin').innerHTML = '';
-     document.getElementById('who').textContent = 'Signed in as ' + window.Clerk.user.primaryEmailAddress.emailAddress + '.';
-     document.getElementById('approve').hidden = false;
-   } else {
-     window.Clerk.mountSignIn(document.getElementById('signin'), {forceRedirectUrl: location.href, signUpForceRedirectUrl: location.href});
-   }
- }
- document.getElementById('yes').onclick = () => decide(true);
- document.getElementById('nope').onclick = () => decide(false);
- window.addEventListener('load', async () => {
-   try { await window.Clerk.load(); window.Clerk.addListener(() => render()); render(); }
-   catch (e) { msg('Could not load sign-in. Check your connection and reload.', 'bad') }
- });
-</script>
-<script async crossorigin="anonymous" data-clerk-publishable-key="__PK__"
- src="https://__FAPI__/npm/@clerk/clerk-js@5/dist/clerk.browser.js"></script>
-</body></html>"""
+:root{color-scheme:dark light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;
+background:#101018;color:#f7f7fb;font:15px/1.6 system-ui,-apple-system,sans-serif;padding:24px}
+main{max-width:420px;width:100%;padding:36px;background:#1b1b27;border:1px solid #303040;border-radius:24px}
+.brand{font-size:12px;letter-spacing:.18em;color:#b8a6ff;font-weight:700}h1{font-size:26px;line-height:1.25;margin:20px 0 12px}
+p{color:#bcbccc}button{width:100%;padding:14px;border:0;border-radius:12px;background:#fff;color:#17171f;font:600 15px system-ui;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}.bad{color:#ffadad}.ok{color:#86e7b0}
+</style></head><body><main>
+<div class="brand">SAGE AI</div><h1 id="title">Your next chapter starts here.</h1>
+<p id="msg" role="status">Continue with your Google account. We’ll take you back to SAGE automatically.</p>
+<button id="google" hidden>Continue with Google</button><div id="clerk-captcha"></div>
+</main><script>
+const TICKET = __TICKET__;
+const stage = __STAGE__;
+const base = location.origin + '/auth/google?ticket=' + encodeURIComponent(TICKET);
+const button = document.getElementById('google');
+const message = (text, type='') => { document.getElementById('msg').textContent=text; document.getElementById('msg').className=type; };
+async function begin() {
+  button.disabled = true;
+  message('Opening Google sign-in…');
+  try {
+    await window.Clerk.client.signIn.authenticateWithRedirect({strategy:'oauth_google',
+      redirectUrl:base+'&stage=callback', redirectUrlComplete:base+'&stage=complete'});
+  } catch(e) { button.disabled=false; button.hidden=false; message('Could not open Google sign-in. Please try again.','bad'); }
+}
+async function complete() {
+  if (!window.Clerk.session) {
+    message('Google sign-in was not completed. Please try again.','bad'); button.hidden=false; return;
+  }
+  const token = await window.Clerk.session.getToken();
+  const response = await fetch('/v1/auth/google/complete', {method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({ticket:TICKET})});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || 'Could not finish sign-in. Please start again from SAGE.');
+  document.getElementById('title').textContent='You’re signed in.';
+  message('Return to SAGE. Your onboarding or home dashboard will open automatically.','ok');
+  button.hidden=true;
+  history.replaceState(null,'','/auth/google?stage=done');
+}
+button.onclick=begin;
+window.addEventListener('load', async () => {
+  try {
+    await window.Clerk.load({signInUrl:base,signUpUrl:base});
+    if (stage==='callback') {
+      message('Finishing Google sign-in…');
+      await window.Clerk.handleRedirectCallback({signInUrl:base,signUpUrl:base,
+        signInForceRedirectUrl:base+'&stage=complete',signUpForceRedirectUrl:base+'&stage=complete',
+        signUpContinueUrl:base+'&stage=incomplete',secondFactorUrl:base+'&stage=verification'});
+    } else if (stage==='complete') { await complete(); }
+    else if (stage==='incomplete' || stage==='verification') {
+      message('Your account needs additional verification. Please contact SAGE support before trying again.','bad');
+    } else if (window.Clerk.session) { await complete(); }
+    else { await begin(); }
+  } catch(e) { message(e.message || 'Could not load sign-in. Check your connection and try again.','bad'); }
+});
+</script><script async crossorigin="anonymous" data-clerk-publishable-key="__PK__"
+src="https://__FAPI__/npm/@clerk/clerk-js@5/dist/clerk.browser.js"></script></body></html>"""
+
+HEADERS = {"Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"}
 
 
 @router.get("/auth/device", response_class=HTMLResponse)
 async def device_page(code: str = ""):
-    s = get_settings()
-    safe_code = "".join(c for c in code.upper() if c.isalnum() or c == "-")[:9]
-    fapi = _frontend_api_from_publishable_key(s.clerk_publishable_key)
-    body = (PAGE.replace("__CODE__", html.escape(safe_code)).replace("__CLIENT__", "your desktop")
-            .replace("__PK__", html.escape(s.clerk_publishable_key)).replace("__FAPI__", html.escape(fapi)))
-    return HTMLResponse(body, headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY"})
+    return HTMLResponse('<h1>Open SAGE to sign in with Google</h1><p>This sign-in link is from an older app version. Please use the updated SAGE app.</p>', headers=HEADERS)
+
+
+@router.get("/auth/google", response_class=HTMLResponse)
+async def google_page(ticket: str = "", stage: str = ""):
+    if stage == "done":
+        return HTMLResponse('<h1>You’re signed in.</h1><p>Return to SAGE to continue.</p>', headers=HEADERS)
+    code = device_auth.verify_browser_ticket(ticket)
+    request = await device_auth.describe(code)
+    if request["status"] != "pending":
+        return HTMLResponse('<h1>Open SAGE to continue</h1><p>This sign-in link has expired or was already used. Start again from the app if needed.</p>', status_code=410, headers=HEADERS)
+    settings = get_settings()
+    fapi = _frontend_api_from_publishable_key(settings.clerk_publishable_key)
+    body = (PAGE.replace('__TICKET__', json.dumps(ticket).replace('<', '\\u003c'))
+            .replace('__STAGE__', json.dumps(stage if stage in ('callback','complete','incomplete','verification') else ''))
+            .replace('__PK__', html.escape(settings.clerk_publishable_key)).replace('__FAPI__', html.escape(fapi)))
+    return HTMLResponse(body, headers=HEADERS)

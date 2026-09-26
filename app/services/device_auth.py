@@ -1,13 +1,15 @@
 """Device sign-in for desktop/mobile clients (RFC 8628-style).
 
 1. Client → POST /v1/auth/device/start → {device_code (secret), user_code, verification_url}
-2. User opens verification_url in the system browser, signs in with Clerk, confirms the same user_code, approves.
+2. User opens verification_url in the system browser, completes Google sign-in; a signed browser ticket links the verified identity automatically.
 3. Client polls POST /v1/auth/device/token with device_code → receives an opaque session token (once).
 
 Session tokens (`sds_…`) are random, stored only as SHA-256 hashes, revocable, and expire after 30 days.
 Authorization still comes from the SAGE user row — the token only proves identity.
 """
 import hashlib
+import hmac
+import time
 import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -32,6 +34,26 @@ def _user_code() -> str:
     return f"{raw[:4]}-{raw[4:]}"
 
 
+def browser_ticket(user_code: str) -> str:
+    payload = f"{user_code}.{int(time.time()) + int(DEVICE_TTL.total_seconds())}"
+    signature = hmac.new(get_settings().clerk_secret_key.encode(),
+                         ("sage-browser-signin:" + payload).encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def verify_browser_ticket(ticket: str) -> str:
+    try:
+        code, expires, signature = ticket.split(".")
+        payload = f"{code}.{expires}"
+        expected = hmac.new(get_settings().clerk_secret_key.encode(),
+                            ("sage-browser-signin:" + payload).encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected) or int(expires) <= time.time():
+            raise ValueError()
+        return code
+    except (ValueError, TypeError):
+        raise Unauthorized("Sign-in expired. Please start again from SAGE.", code="signin_expired")
+
+
 async def start(client: str, device_name: str | None) -> dict:
     device_code = secrets.token_urlsafe(32)
     async with transaction() as conn:
@@ -46,7 +68,7 @@ async def start(client: str, device_name: str | None) -> dict:
         else:
             raise AppError("Could not allocate a sign-in code, please retry", code="device_code_unavailable", status_code=503)
     base = get_settings().public_base_url.rstrip("/")
-    return {"device_code": device_code, "user_code": code, "verification_url": f"{base}/auth/device?code={code}",
+    return {"device_code": device_code, "user_code": code, "verification_url": f"{base}/auth/google?ticket={browser_ticket(code)}",
             "expires_in": int(DEVICE_TTL.total_seconds()), "interval": POLL_INTERVAL}
 
 

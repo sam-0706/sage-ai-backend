@@ -87,4 +87,37 @@ def test_session_token_prefix_is_rejected_when_unknown(monkeypatch):
 def test_device_page_escapes_code():
     r = client.get("/auth/device?code=<script>alert(1)</script>")
     assert r.status_code == 200 and "<script>alert" not in r.text.split("const CODE")[0]
-    assert "clerk.browser.js" in r.text
+    assert "Open SAGE" in r.text and "mountSignIn" not in r.text
+
+
+def test_browser_ticket_is_authenticated_and_expires(monkeypatch):
+    from app.core.errors import Unauthorized
+    monkeypatch.setattr(device_auth.time, "time", lambda: 1000)
+    ticket = device_auth.browser_ticket("BCDF-GHJK")
+    assert device_auth.verify_browser_ticket(ticket) == "BCDF-GHJK"
+    with pytest.raises(Unauthorized):
+        device_auth.verify_browser_ticket(ticket.replace("BCDF", "XXXX"))
+    monkeypatch.setattr(device_auth.time, "time", lambda: 1601)
+    with pytest.raises(Unauthorized):
+        device_auth.verify_browser_ticket(ticket)
+
+
+def test_google_page_requires_valid_ticket_and_has_no_hosted_form(monkeypatch):
+    assert client.get("/auth/google?ticket=invalid").status_code == 401
+    async def pending(code):
+        return {"status": "pending"}
+    monkeypatch.setattr(device_auth, "describe", pending)
+    ticket = device_auth.browser_ticket("BCDF-GHJK")
+    response = client.get("/auth/google", params={"ticket": ticket})
+    assert response.status_code == 200
+    assert "oauth_google" in response.text and "handleRedirectCallback" in response.text
+    assert "mountSignIn" not in response.text and 'class="code"' not in response.text
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert client.post("/v1/auth/google/complete", json={"ticket": ticket}).status_code == 401
+
+
+def test_google_page_rejects_used_requests(monkeypatch):
+    async def consumed(code):
+        return {"status": "consumed"}
+    monkeypatch.setattr(device_auth, "describe", consumed)
+    assert client.get("/auth/google", params={"ticket": device_auth.browser_ticket("BCDF-GHJK")}).status_code == 410

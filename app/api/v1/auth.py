@@ -21,11 +21,21 @@ class DeviceCodeIn(BaseModel):
     user_code: str = Field(min_length=9, max_length=9)
 
 
+class GoogleCompleteIn(BaseModel):
+    ticket: str = Field(min_length=70, max_length=200)
+
+
+@router.post("/google/complete")
+async def google_complete(body: GoogleCompleteIn, p: Principal = Depends(get_principal)):
+    code = device_auth.verify_browser_ticket(body.ticket)
+    return await device_auth.approve(code, p.id, True)
+
+
 class DeviceTokenIn(BaseModel):
     device_code: str = Field(min_length=20, max_length=200)
 
 
-@router.post("/device/start", summary="Start device sign-in (public). Show user_code and open verification_url.")
+@router.post("/device/start", summary="Start device sign-in (public). Open verification_url in the system browser.")
 async def device_start(body: DeviceStartIn):
     return await device_auth.start(body.client, body.device_name)
 
