@@ -1,7 +1,7 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends
 from app.auth.deps import Principal,get_principal
-from app.domain.campus import PlanRequest, TaskUpdate, DeadlineIn, InterviewIn, CheckoutIn
+from app.domain.campus import PlanRequest, TaskUpdate, DeadlineIn, InterviewIn, CheckoutIn, JobDiscoveryIn
 from app.services import campus,billing
 from app.repositories.db import transaction,row
 from app.core.errors import NotFound,AppError
@@ -15,6 +15,8 @@ async def workspace(p:Principal=Depends(get_principal)): return await campus.wor
 async def generate(body:PlanRequest,p:Principal=Depends(get_principal)): return await campus.generate(p.id,body)
 @router.post('/recommendations')
 async def recommend(p:Principal=Depends(get_principal)): return await campus.recommendations(p.id)
+@router.post('/jobs/discover')
+async def discover_jobs(body:JobDiscoveryIn,p:Principal=Depends(get_principal)): return await campus.discover_jobs(p.id,body)
 @router.post('/interview')
 async def interview(body:InterviewIn,p:Principal=Depends(get_principal)): return await campus.interview(p.id,body.job_id,body.resume_text)
 @router.patch('/tasks/{task_id}')

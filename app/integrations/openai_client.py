@@ -51,7 +51,8 @@ async def _log_run(*, user_id, task, prompt_version, model, request_id, latency_
                                     input_tokens, output_tokens, status, validation_ok, error)
                values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id""",
             user_id, task, prompt_version, model, request_id, get_correlation_id(), latency_ms,
-            getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None),
+            getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None),
+            getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None),
             status, validation_ok, (error or "")[:500] or None)
 
 
@@ -106,6 +107,53 @@ async def structured(
         if isinstance(e, ProviderError):
             raise
         raise ProviderError("The AI service is temporarily unavailable", code="ai_unavailable") from e
+
+
+async def web_search_structured(
+    *,
+    task: str,
+    prompt_version: str,
+    instructions: str,
+    input_text: str,
+    schema: type[T],
+    user_id: UUID | None,
+    model: str | None = None,
+) -> AIResult[T]:
+    """Use the Responses web-search tool and validate the final answer against `schema`."""
+    s = get_settings()
+    model = model or s.openai_model
+    started = time.perf_counter()
+    request_id = usage = None
+    try:
+        response = await _client().responses.parse(
+            model=model,
+            instructions=instructions,
+            input=input_text,
+            tools=[{
+                "type": "web_search",
+                "external_web_access": True,
+                "search_context_size": "high",
+                "user_location": {"type": "approximate", "city": "Mumbai", "region": "Maharashtra", "country": "IN", "timezone": "Asia/Kolkata"},
+            }],
+            text_format=schema,
+            reasoning={"effort": "low"},
+            max_tool_calls=10,
+        )
+        request_id = getattr(response, "_request_id", None) or response.id
+        usage = response.usage
+        parsed = response.output_parsed
+        if parsed is None:
+            raise _InvalidOutput("model returned no parseable web-search output")
+        latency = int((time.perf_counter() - started) * 1000)
+        run_id = await _log_run(user_id=user_id, task=task, prompt_version=prompt_version, model=model,
+                                request_id=request_id, latency_ms=latency, usage=usage, status="succeeded", validation_ok=True)
+        return AIResult(data=parsed, run_id=run_id, model=model)
+    except (openai.APIError, ValidationError, json.JSONDecodeError, _InvalidOutput) as e:
+        latency = int((time.perf_counter() - started) * 1000)
+        await _log_run(user_id=user_id, task=task, prompt_version=prompt_version, model=model, request_id=request_id,
+                       latency_ms=latency, usage=usage, status="failed", validation_ok=False, error=f"{type(e).__name__}: {e}")
+        log(logger, logging.WARNING, "web search task failed", task=task, err=type(e).__name__)
+        raise ProviderError("Live job search is temporarily unavailable", code="job_search_unavailable") from e
 
 
 async def stream_text(

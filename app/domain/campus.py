@@ -55,3 +55,30 @@ class InterviewIn(BaseModel):
 
 class CheckoutIn(BaseModel):
  idempotency_key: str = Field(min_length=8,max_length=120)
+
+class JobDiscoveryIn(BaseModel):
+ role: str | None = Field(default=None,max_length=120)
+ location: str | None = Field(default=None,max_length=120)
+ work_mode: Literal['any','remote','hybrid','onsite'] = 'any'
+
+class DiscoveredJob(BaseModel):
+ title: str
+ company: str
+ location: str
+ work_mode: str
+ employment_type: str
+ salary: str | None = None
+ posted_at: str | None = None
+ source_name: str
+ source_url: str
+ apply_url: str
+ skills: list[str]
+ match_score: int = Field(ge=0,le=100)
+ why_it_fits: list[str]
+ gaps: list[str]
+
+class JobDiscoveryResult(BaseModel):
+ summary: str
+ jobs: list[DiscoveredJob] = Field(max_length=5)
+ searched_at: str
+ search_notes: list[str]
