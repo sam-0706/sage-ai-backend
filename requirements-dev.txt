@@ -1,0 +1,4 @@
+# Local dev: uv pip install -e . -r requirements-dev.txt   (runtime deps live in pyproject.toml)
+uvicorn[standard]>=0.30
+pytest>=8.3
+pytest-asyncio>=0.24
