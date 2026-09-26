@@ -118,9 +118,9 @@ async def main(path: str, dry_run: bool) -> None:
                     rec["id"], d["mode"], {"segment": d["segment"]}, {"segment": "import"})
                 await conn.execute(
                     """insert into subscriptions (user_id, plan_code, period_end, voice_seconds_allowance,
-                                                  ai_requests_allowance, chat_messages_allowance, is_test, source)
+                                                  ai_requests_allowance, chat_messages_allowance, autoapply_calls_allowance, is_test, source)
                        select $1, code, now() + make_interval(days => period_days), (voice_minutes * 60)::int,
-                              ai_requests, chat_messages, true, 'waitlist_import'
+                              ai_requests, chat_messages, autoapply_calls, true, 'waitlist_import'
                        from billing_plans where code = 'waitlist_beta'
                        on conflict do nothing""", rec["id"])
             await conn.execute(

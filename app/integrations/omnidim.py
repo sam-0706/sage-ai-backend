@@ -57,11 +57,12 @@ def clean_transcript(raw: str | None) -> str:
     return text.strip()
 
 
-async def dispatch_call(*, to_number: str, call_context: dict, metadata: dict) -> str:
+async def dispatch_call(*, to_number: str, call_context: dict, metadata: dict, agent_id: str | None = None) -> str:
     s = get_settings()
-    if not s.omnidim_agent_id:
+    agent_id = agent_id or s.omnidim_agent_id
+    if not agent_id:
         raise ProviderError("Voice agent is not configured", code="voice_not_configured", status_code=503)
-    body = {"agent_id": int(s.omnidim_agent_id), "to_number": to_number, "call_context": call_context, "metadata": metadata}
+    body = {"agent_id": int(agent_id), "to_number": to_number, "call_context": call_context, "metadata": metadata}
     if s.omnidim_from_number_id:
         body["from_number_id"] = int(s.omnidim_from_number_id)
     data = await request_json("POST", f"{s.omnidim_base_url}/calls/dispatch", headers=_headers(), json=body,
@@ -89,12 +90,13 @@ def _to_provider_call(log: dict) -> ProviderCall:
     )
 
 
-async def find_call_by_request_id(request_id: str, max_pages: int = 3) -> ProviderCall | None:
+async def find_call_by_request_id(request_id: str, max_pages: int = 3, agent_id: str | None = None) -> ProviderCall | None:
     """Reconcile: locate the call log whose call_request_id matches our dispatch requestId."""
     s = get_settings()
+    agent_id = agent_id or s.omnidim_agent_id
     for page in range(1, max_pages + 1):
         data = await request_json("GET", f"{s.omnidim_base_url}/calls/logs", headers=_headers(), provider="omnidim",
-                                  params={"pageno": page, "pagesize": 50, "agentid": s.omnidim_agent_id})
+                                  params={"pageno": page, "pagesize": 50, "agentid": agent_id})
         logs = data.get("call_log_data", []) if isinstance(data, dict) else []
         for log in logs:
             req = log.get("call_request_id")

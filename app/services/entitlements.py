@@ -7,7 +7,7 @@ import asyncpg
 from app.core.errors import QuotaExceeded
 from app.repositories.db import row
 
-Meter = Literal["ai_requests", "chat_messages", "voice_seconds"]
+Meter = Literal["ai_requests", "chat_messages", "voice_seconds", "autoapply_calls"]
 
 
 async def active_subscription(conn: asyncpg.Connection, user_id: UUID) -> dict | None:
@@ -29,6 +29,8 @@ def summarize(sub: dict | None) -> dict | None:
                         "remaining": max(0, sub["ai_requests_allowance"] - sub["ai_requests_used"])},
         "chat_messages": {"allowance": sub["chat_messages_allowance"], "used": sub["chat_messages_used"],
                           "remaining": max(0, sub["chat_messages_allowance"] - sub["chat_messages_used"])},
+        "autoapply_calls": {"allowance": sub["autoapply_calls_allowance"], "used": sub["autoapply_calls_used"],
+                            "remaining": max(0, sub["autoapply_calls_allowance"] - sub["autoapply_calls_used"])},
     }
 
 

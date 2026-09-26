@@ -30,10 +30,10 @@ async def grant_plan(conn: asyncpg.Connection, user_id: UUID, plan_code: str, *,
                        "where user_id = $1 and status = 'active'", user_id)
     sub = row(await conn.fetchrow(
         """insert into subscriptions (user_id, plan_code, period_end, voice_seconds_allowance, ai_requests_allowance,
-                                      chat_messages_allowance, is_test, source)
-           values ($1,$2,$3,$4,$5,$6,true,$7) returning *""",
+                                      chat_messages_allowance, autoapply_calls_allowance, is_test, source)
+           values ($1,$2,$3,$4,$5,$6,$7,true,$8) returning *""",
         user_id, plan_code, datetime.now(UTC) + timedelta(days=plan["period_days"]), int(plan["voice_minutes"] * 60),
-        plan["ai_requests"], plan["chat_messages"], source))
+        plan["ai_requests"], plan["chat_messages"], plan["autoapply_calls"], source))
     await audit.record(conn, "subscription.granted", actor_id=actor_id, target_type="user", target_id=user_id,
                        metadata={"plan": plan_code, "source": source})
     return sub

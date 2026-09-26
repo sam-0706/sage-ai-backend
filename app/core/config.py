@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     omnidim_api_key: str = ""
     omnidim_base_url: str = "https://omnidim.io/api/v1"
     omnidim_agent_id: str = ""
+    omnidim_exam_agent_id: str = ""
+    exam_call_expected_duration_sec: int = 300
     omnidim_from_number_id: str = ""
     omnidim_webhook_secret: str = ""
     voice_expected_duration_sec: int = 180
@@ -56,6 +58,13 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+
+    # OpenRouter (desktop auto-apply agent via server-side proxy; key never leaves the server)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    autoapply_vision_model: str = "~openai/gpt-latest"
+    autoapply_text_model: str = "~openai/gpt-mini-latest"
+    autoapply_max_body_bytes: int = 4_000_000
 
     # Operations
     cron_secret: str = ""

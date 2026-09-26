@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from app.api.device_page import router as device_page_router
 from app.api.health import router as health_router
 from app.api.v1.router import api_v1
 from app.core.config import get_settings
@@ -83,4 +84,5 @@ async def root():
 
 
 app.include_router(health_router)
+app.include_router(device_page_router)
 app.include_router(api_v1)

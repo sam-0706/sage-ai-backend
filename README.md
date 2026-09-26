@@ -10,7 +10,17 @@ goal profile + signals → rules detect → AI prioritises & writes a brief → 
 → verified call state → AI extraction → student edits & accepts plan → (optional) explicit share with staff
 ```
 
-Plus a **RAG knowledge chatbot** over the college knowledge base and faculty/advisor directory.
+Plus a **RAG knowledge chatbot** over the college knowledge base and faculty/advisor directory, **exam prep**
+(AI cue-card decks → SM-2 spaced repetition → a spoken quiz by an OmniDimension exam-coach agent → a
+"where you stand" analysis that feeds weak concepts back into review), and a **metered LLM proxy** that powers the
+desktop app's local auto-apply agent without shipping any provider key to user machines.
+
+### Desktop sign-in (device flow)
+
+Desktop/mobile apps call `POST /v1/auth/device/start`, open the returned `verification_url` in the system browser
+(Clerk sign-in + "approve this code"), and poll `POST /v1/auth/device/token`. Approval returns a single-use opaque
+`sds_…` session token (30 days, SHA-256-hashed at rest, revocable from Settings). The API accepts either a Clerk JWT
+(web) or an `sds_` token (desktop/mobile); authorization always comes from the SAGE user row.
 
 ## Stack
 
@@ -81,6 +91,10 @@ All `/v1` routes require `Authorization: Bearer <Clerk session token>` except we
 
 | Area | Endpoints |
 |---|---|
+| Desktop/mobile sign-in | `POST /v1/auth/device/start`, `POST /v1/auth/device/token`, browser page `GET /auth/device?code=…`, `POST /v1/auth/device/approve`, `POST /v1/auth/logout`, `GET/DELETE /v1/auth/sessions` |
+| Onboarding | `GET /v1/onboarding` (pre-filled from the waitlist), `POST /v1/onboarding` |
+| Exam prep | `GET /v1/exam-prep/overview`, `GET/POST /v1/exam-prep/decks`, `GET/DELETE /v1/exam-prep/decks/{id}`, `GET /v1/exam-prep/decks/{id}/study`, `POST /v1/exam-prep/cards/{id}/review`, `GET /v1/exam-prep/calls/preflight`, `POST /v1/exam-prep/calls`, `GET /v1/exam-prep/calls/{id}`, `POST /v1/exam-prep/calls/{id}/analyze`, `GET /v1/exam-prep/assessments[/{id}]` |
+| Auto-apply (desktop) | `GET /v1/autoapply/status`, OpenAI-compatible `GET /v1/autoapply/llm/models` and `POST /v1/autoapply/llm/chat/completions` (metered proxy to OpenRouter) |
 | Me | `GET /v1/me`, `PATCH /v1/me`, `GET /v1/home`, `POST /v1/me/role-requests`, `DELETE /v1/me/data` |
 | Profile & signals | `GET/PUT /v1/profile`, `GET /v1/demo-profiles`, `POST /v1/profile/load-demo`, `GET/POST /v1/signals`, `PATCH /v1/signals/{id}` |
 | Priority | `POST /v1/interventions/prioritize`, `GET /v1/interventions[/{id}]`, `POST /v1/interventions/{id}/dismiss` |

@@ -25,9 +25,9 @@ CONSENT_TEXT_V1 = ("I agree to receive an AI voice check-in call from SAGE AI at
                    "coach, not a faculty member or advisor. It will be transcribed to create my plan. I can end the call at "
                    "any time. No one else will be contacted.")
 
-CALL_COLS = """id, user_id, intervention_id, initiated_by, status::text as status, destination, consented_at,
+CALL_COLS = """id, user_id, intervention_id, deck_id, purpose, initiated_by, status::text as status, destination, consented_at,
                expected_duration_sec, estimated_minutes, provider, provider_request_id, provider_call_log_id, provider_status,
-               provider_hangup_reason, duration_seconds, cost, transcript_status::text as transcript_status,
+               provider_hangup_reason, provider_agent_id, duration_seconds, cost, transcript_status::text as transcript_status,
                extraction_status::text as extraction_status, is_simulated, error, reconcile_attempts, last_reconciled_at,
                dispatched_at, completed_at, created_at, updated_at"""
 LIVE = ("requested", "dispatching", "dispatched", "in_progress")
@@ -209,7 +209,7 @@ async def reconcile_call(call_id: UUID) -> dict:
 
     found = None
     if call["provider_request_id"]:
-        found = await omnidim.find_call_by_request_id(call["provider_request_id"])
+        found = await omnidim.find_call_by_request_id(call["provider_request_id"], agent_id=call.get("provider_agent_id"))
     now = datetime.now(UTC)
     async with transaction() as conn:
         await conn.execute("update calls set reconcile_attempts = reconcile_attempts + 1, last_reconciled_at = now() where id = $1",

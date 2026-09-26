@@ -37,6 +37,11 @@ Today's date: {today}."""
 
 async def run_extraction(call_id: UUID, *, force: bool = False) -> dict:
     async with transaction() as conn:
+        purpose = await conn.fetchval("select purpose from calls where id = $1", call_id)
+    if purpose == "exam_prep":
+        from app.services import examprep
+        return await examprep.run_assessment(call_id, force=force)
+    async with transaction() as conn:
         call = row(await conn.fetchrow(
             "select *, status::text as status_t, extraction_status::text as ext from calls where id = $1 for update", call_id))
         if not call:

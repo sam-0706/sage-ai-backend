@@ -79,3 +79,71 @@ class ExtractionOutput(BaseModel):
 class ChatSafety(BaseModel):
     crisis: bool
     category: Literal["none", "self_harm", "medical_emergency", "abuse", "other_urgent"]
+
+
+# ---------------------------------------------------------------- exam prep
+class KeyConcept(BaseModel):
+    name: str
+    explanation: str
+
+
+class CueCard(BaseModel):
+    concept: str
+    card_type: Literal["definition", "concept", "application", "formula", "example", "compare"]
+    front: str
+    back: str
+    hint: str | None
+    mnemonic: str | None
+    difficulty: Literal["easy", "medium", "hard"]
+
+
+class DeckOutput(BaseModel):
+    title: str
+    summary: str
+    key_concepts: list[KeyConcept]
+    cards: list[CueCard]
+    quick_tips: list[str]
+    common_mistakes: list[str]
+
+
+class QuestionResult(BaseModel):
+    concept: str
+    question: str
+    student_answer: str
+    verdict: Literal["correct", "partially_correct", "incorrect", "not_answered"]
+    feedback: str
+
+
+class ConceptMastery(BaseModel):
+    concept: str
+    mastery: Literal["strong", "partial", "weak", "not_assessed"]
+    score: int
+    evidence: str
+
+
+class Misconception(BaseModel):
+    misconception: str
+    correction: str
+
+
+class StudyStep(BaseModel):
+    step: str
+    focus_concept: str
+    minutes: int
+
+
+class ExamAssessmentOutput(BaseModel):
+    """Where the student stands after an exam-prep voice quiz."""
+    overall_score: int
+    readiness: Literal["not_ready", "developing", "nearly_ready", "ready"]
+    summary: str
+    questions: list[QuestionResult]
+    concepts: list[ConceptMastery]
+    strengths: list[str]
+    gaps: list[str]
+    misconceptions: list[Misconception]
+    study_plan: list[StudyStep]
+    cards_to_review: list[str]
+    confidence: float
+    transcript_gaps: list[str]
+    encouragement: str

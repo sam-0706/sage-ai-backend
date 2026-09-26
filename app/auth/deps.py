@@ -85,8 +85,8 @@ async def _resolve_clerk_user(clerk_user_id: str) -> dict:
         user = await users_repo.create_open_signup(conn, emails[0], clerk_user_id, full_name)
         await conn.execute(
             """insert into subscriptions (user_id, plan_code, period_end, voice_seconds_allowance, ai_requests_allowance,
-                                          chat_messages_allowance, source)
-               select $1, code, now() + make_interval(days => period_days), (voice_minutes*60)::int, ai_requests, chat_messages, 'signup'
+                                          chat_messages_allowance, autoapply_calls_allowance, source)
+               select $1, code, now() + make_interval(days => period_days), (voice_minutes*60)::int, ai_requests, chat_messages, autoapply_calls, 'signup'
                from billing_plans where code = 'student_free' on conflict do nothing""", user["id"])
         await audit.record(conn, "user.signed_up", actor_id=user["id"], target_type="user", target_id=user["id"])
         return user
@@ -106,8 +106,16 @@ async def get_principal(
         log(logger, logging.WARNING, "dev auth bypass used", email=x_dev_user_email)
     else:
         token = _bearer(authorization)
-        claims = await asyncio.to_thread(clerk_api.verify_session_token, token)
-        user = await _resolve_clerk_user(claims["sub"])
+        if token.startswith("sds_"):  # SAGE device session (desktop / mobile)
+            from app.services import device_auth
+            user_id = await device_auth.user_for_session_token(token)
+            async with transaction() as conn:
+                user = await users_repo.get_by_id(conn, user_id)
+            if not user:
+                raise Unauthorized("Account not found")
+        else:  # Clerk session JWT (web)
+            claims = await asyncio.to_thread(clerk_api.verify_session_token, token)
+            user = await _resolve_clerk_user(claims["sub"])
 
     if user["status"] in ("suspended", "deleted"):
         raise Forbidden("This account is not active", code="account_inactive")
