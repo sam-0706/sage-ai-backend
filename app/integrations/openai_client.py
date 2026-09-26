@@ -132,12 +132,12 @@ async def web_search_structured(
             tools=[{
                 "type": "web_search",
                 "external_web_access": True,
-                "search_context_size": "high",
+                "search_context_size": "medium",
                 "user_location": {"type": "approximate", "city": "Mumbai", "region": "Maharashtra", "country": "IN", "timezone": "Asia/Kolkata"},
             }],
             text_format=schema,
             reasoning={"effort": "low"},
-            max_tool_calls=10,
+            max_tool_calls=4,
         )
         request_id = getattr(response, "_request_id", None) or response.id
         usage = response.usage
