@@ -218,7 +218,7 @@ async def preflight(user: dict, deck_id: UUID) -> dict:
     dests = sorted(calls_svc._allowed_destinations(user.get("phone")))
     expected = s.exam_call_expected_duration_sec
     return {"enabled": enabled and bool(s.omnidim_interview_agent_id if deck.get("coach_kind") == "interview" else s.omnidim_exam_agent_id), "deck_id": deck_id, "topic": deck["topic"], "title": deck["title"],
-            "purpose": f"A {round(expected / 60)}-minute spoken quiz on {deck['title']} to find out where you stand.",
+            "purpose": ("An AI mock placement interview based on your resume and the selected job description." if deck.get("coach_kind") == "interview" else f"A {round(expected / 60)}-minute spoken quiz on {deck['title']} to find out where you stand."),
             "destinations": [{"number": d, "masked": calls_svc.mask(d)} for d in dests],
             "expected_duration_sec": expected, "estimated_minutes": round(expected / 60, 1),
             "remaining_voice_seconds": remaining, "may_exceed_allowance": expected > remaining,

@@ -78,12 +78,15 @@ async def complete_onboarding(body: OnboardingIn, p: Principal = Depends(get_pri
                "goals": body.goals, "interests": body.interests, "deadline_calls": body.deadline_call_consent, "deadline_call_window": "09:00-18:00 Asia/Kolkata", "deadline_consent_at": datetime.now(UTC).isoformat() if body.deadline_call_consent else None}
     async with transaction() as conn:
         await users_repo.update_self(conn, p.id, {"full_name": body.full_name, "mode": body.mode,
-                                                  **({"phone": phone} if phone else {})})
+                                                  "phone": phone})
         prof = await profile_svc.upsert_profile(conn, p.id, body.mode, body.profile, None, consent)
         await conn.execute("update users set onboarding_completed_at = coalesce(onboarding_completed_at, now()), "
                            "status = case when status = 'invited' then 'active'::user_status else status end where id = $1", p.id)
         await audit.record(conn, "onboarding.completed", actor_id=p.id, target_type="user", target_id=p.id,
                            metadata={"mode": body.mode, "interests": body.interests, "call_consent": body.call_consent})
         user = await users_repo.get_by_id(conn, p.id)
+    if body.mode == "student" and body.profile.get("onboarding_version") == 2:
+        from app.services.campus import seed_deadlines
+        await seed_deadlines(p.id)
     user.pop("clerk_user_id", None)
     return {"completed": True, "user": user, "profile": prof}
