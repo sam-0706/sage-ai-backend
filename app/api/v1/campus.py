@@ -43,3 +43,9 @@ async def checkout(deadline_id:UUID,body:CheckoutIn,p:Principal=Depends(get_prin
 
 @router.post('/reminders/check')
 async def reminders(p:Principal=Depends(get_principal)): return await campus.check_reminders(p.id)
+
+from app.domain.campus import ExposureDiscoveryIn
+
+@router.post('/exposure/discover')
+async def discover_exposure(body:ExposureDiscoveryIn,p:Principal=Depends(get_principal)):
+ return await campus.discover_exposure(p.id,body)

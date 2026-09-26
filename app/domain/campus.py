@@ -82,3 +82,22 @@ class JobDiscoveryResult(BaseModel):
  jobs: list[DiscoveredJob] = Field(max_length=5)
  searched_at: str
  search_notes: list[str]
+
+class ExposureDiscoveryIn(BaseModel):
+ kind: Literal['internships','workshops','faculty','clubs','networking']
+
+class ExposureItem(BaseModel):
+ title: str
+ organisation: str
+ description: str
+ location: str
+ source_url: str
+ action_url: str | None = None
+ action_label: str
+ availability: str
+ deadline: str | None = None
+ why_it_fits: str
+
+class ExposureDiscoveryResult(BaseModel):
+ summary: str
+ items: list[ExposureItem] = Field(max_length=8)

@@ -64,3 +64,21 @@ class _AsyncContext:
  def __init__(self,value): self.value=value
  async def __aenter__(self): return self.value
  async def __aexit__(self,*_): return False
+
+@pytest.mark.asyncio
+async def test_live_clubs_does_not_invent_joining_links(monkeypatch):
+ from app.domain.campus import ExposureDiscoveryIn, ExposureDiscoveryResult, ExposureItem
+ uid=uuid4();conn=AsyncMock()
+ monkeypatch.setattr(campus,'transaction',lambda:_AsyncContext(conn))
+ monkeypatch.setattr(campus,'feature',AsyncMock())
+ monkeypatch.setattr(campus.entitlements,'consume',AsyncMock())
+ monkeypatch.setattr(campus.profile,'get_profile',AsyncMock(return_value={'data':{'target_role':'Product Manager'}}))
+ base=dict(title='Club',organisation='BITSoM',description='Activities',location='Mumbai',action_label='Join',availability='Ask about induction',why_it_fits='Product interest')
+ items=[ExposureItem(**base,source_url='https://example.com/club',action_url='javascript:alert(1)'),ExposureItem(**base,source_url='javascript:alert(1)')]
+ search=AsyncMock(return_value=AIResult(data=ExposureDiscoveryResult(summary='Clubs',items=items),run_id=uuid4(),model='gpt-5-mini'))
+ monkeypatch.setattr(campus.openai_client,'web_search_structured',search)
+ result=await campus.discover_exposure(uid,ExposureDiscoveryIn(kind='clubs'))
+ assert len(result['items'])==1
+ assert result['items'][0]['action_url'] is None
+ assert 'Never claim membership or registration succeeded' in search.call_args.kwargs['instructions']
+ assert 'Product Manager' in search.call_args.kwargs['input_text']
