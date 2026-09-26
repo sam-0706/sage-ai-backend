@@ -219,7 +219,9 @@ async def discover_exposure(user_id, request):
             'For networking, find upcoming public industry events in Mumbai or online with registration pages. '
             'Do not invent openings, links, dates, affiliations or application status. Exclude expired events. '
             'Every source_url must be a page inspected in this search. action_url must be a verified application or registration link, otherwise null. '
-            'Distinguish a club directory from open recruitment. Use fewer results or none when evidence is unavailable.'),
+            'Distinguish a club directory from open recruitment. Historical club material does not prove an active intake today. '
+            'Never infer annual recruitment cycles, deadlines, locations or joining procedures without source evidence. '
+            'State current intake unverified when only historical material exists. Use fewer results or none when evidence is unavailable.'),
         input_text=json.dumps({'kind':request.kind,'candidate':candidate,'today':datetime.now(ZoneInfo('Asia/Kolkata')).date().isoformat()}))
     from urllib.parse import urlsplit
     def safe(url):
