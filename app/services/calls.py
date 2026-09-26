@@ -48,6 +48,20 @@ def mask(n: str | None) -> str | None:
     return None if not n else n[:3] + "•" * max(0, len(n) - 7) + n[-4:]
 
 
+def terminal_error(status: str, provider_reason: str | None) -> str | None:
+    """Turn provider outcomes into concise, actionable copy for the call panel."""
+    reason = (provider_reason or "").strip().lower()
+    if status == "failed":
+        if "network" in reason or "carrier" in reason:
+            return "The phone network could not connect this call. Please try again."
+        return "The voice provider could not connect this call. Please try again."
+    if status == "no_answer":
+        return "The call was not answered. Check your signal and try again when your phone is nearby."
+    if status == "busy":
+        return "Your phone line was busy. Please try again."
+    return None
+
+
 def _allowed_destinations(user_phone: str | None) -> set[str]:
     s = get_settings()
     allowed = {normalize_number(n) for n in s.voice_allowed_test_numbers}
@@ -229,6 +243,7 @@ async def reconcile_call(call_id: UUID) -> dict:
 
 async def _apply_provider_state(conn, call: dict, pc: omnidim.ProviderCall) -> None:
     status = pc.status
+    user_error = terminal_error(status, pc.hangup_reason)
     transcript_status, extraction_status = "none", "not_applicable"
     if status == "completed":
         if pc.transcript:
@@ -250,10 +265,10 @@ async def _apply_provider_state(conn, call: dict, pc: omnidim.ProviderCall) -> N
                   duration_seconds = $6, cost = $7, transcript_status = $8::transcript_status,
                   extraction_status = case when extraction_status in ('succeeded','running') then extraction_status else $9::extraction_status end,
                   completed_at = case when $2 in ('completed','no_answer','busy','failed') then coalesce(completed_at, now()) else completed_at end,
-                  error = null
+                  error = $10
            where id = $1""",
         call["id"], status, pc.call_log_id, pc.raw_status, pc.hangup_reason, pc.duration_seconds, pc.cost,
-        transcript_status, extraction_status)
+        transcript_status, extraction_status, user_error)
     if status in omnidim.FINAL_STATUSES:
         seconds = int(round(pc.duration_seconds))
         if seconds > 0 and call["status"] != "completed":

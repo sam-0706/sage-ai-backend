@@ -63,7 +63,9 @@ async def dispatch_call(*, to_number: str, call_context: dict, metadata: dict, a
     if not agent_id:
         raise ProviderError("Voice agent is not configured", code="voice_not_configured", status_code=503)
     body = {"agent_id": int(agent_id), "to_number": to_number, "call_context": call_context, "metadata": metadata}
-    if s.omnidim_from_number_id:
+    # The dedicated India number is optional. Keep the platform default dialer unless
+    # the number has been carrier-verified and explicitly enabled in the environment.
+    if s.omnidim_use_configured_from_number and s.omnidim_from_number_id:
         body["from_number_id"] = int(s.omnidim_from_number_id)
     data = await request_json("POST", f"{s.omnidim_base_url}/calls/dispatch", headers=_headers(), json=body,
                               provider="omnidim", timeout=25.0, retries=0)

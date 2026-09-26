@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from app.core.errors import AppError, Unauthorized
 from app.domain.ai_schemas import ExtractionOutput, PriorityOutput
 from app.integrations import clerk_api, omnidim, razorpay
-from app.services.calls import mask, normalize_number
+from app.services.calls import mask, normalize_number, terminal_error
 from app.services.knowledge import chunk_text, html_to_text
 from app.services.priority import detect_events
 
@@ -160,6 +160,32 @@ def test_provider_status_normalization(raw, expected):
 
 def test_transcript_cleaning():
     assert omnidim.clean_transcript("AI: hi<br/>User: hello<br>") == "AI: hi\nUser: hello"
+
+
+def test_provider_network_failure_has_actionable_copy():
+    assert terminal_error("failed", "Network error") == "The phone network could not connect this call. Please try again."
+    assert terminal_error("completed", None) is None
+
+
+@pytest.mark.asyncio
+async def test_dispatch_uses_default_number_until_dedicated_number_is_enabled(monkeypatch):
+    from types import SimpleNamespace
+
+    settings = SimpleNamespace(
+        omnidim_agent_id="258811", omnidim_from_number_id="6420",
+        omnidim_use_configured_from_number=False, omnidim_base_url="https://voice.example/api/v1",
+        omnidim_api_key="test-key",
+    )
+    captured = {}
+
+    async def fake_request(method, url, **kwargs):
+        captured.update(kwargs["json"])
+        return {"success": True, "status": "dispatched", "requestId": 1}
+
+    monkeypatch.setattr(omnidim, "get_settings", lambda: settings)
+    monkeypatch.setattr(omnidim, "request_json", fake_request)
+    await omnidim.dispatch_call(to_number="+919000000000", call_context={}, metadata={})
+    assert "from_number_id" not in captured
 
 
 # ---------------------------------------------------------------- knowledge

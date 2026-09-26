@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     omnidim_interview_agent_id: str = ""
     exam_call_expected_duration_sec: int = 300
     omnidim_from_number_id: str = ""
+    omnidim_use_configured_from_number: bool = False
     omnidim_webhook_secret: str = ""
     voice_expected_duration_sec: int = 180
     voice_allowed_test_numbers: CsvList = Field(default_factory=list)
