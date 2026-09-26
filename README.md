@@ -127,7 +127,7 @@ For local API testing without a browser, set `DEV_AUTH_BYPASS=true` (only honour
 - `vercel.json` pins functions to `hnd1` (same region as the database), sets `maxDuration`, and schedules the
   maintenance cron (daily on Hobby; the cron is a backstop — webhooks and reconcile-on-read do the real-time work).
 - Set every variable from `.env.example` in the Vercel project (Production), with `APP_ENV=production`,
-  `DEV_AUTH_BYPASS=false`, `PUBLIC_BASE_URL=https://<deployment-domain>`.
+  `DEV_AUTH_BYPASS=false`, `PUBLIC_BASE_URL=https://sage-ai-backend-hazel.vercel.app`.
 - After the first deploy: `python -m scripts.setup_voice_agent` → set `OMNIDIM_AGENT_ID` → redeploy.
 - Razorpay webhook (optional): point `https://<domain>/v1/webhooks/razorpay` at events `payment.captured`, `order.paid`
   and set `RAZORPAY_WEBHOOK_SECRET`.
