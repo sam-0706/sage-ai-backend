@@ -1,8 +1,9 @@
 """Onboarding for waitlisted testers: everything we already know from the waitlist is pre-filled."""
 from typing import Any
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.auth.deps import Principal, get_principal
 from app.domain.schemas import Mode
@@ -26,8 +27,21 @@ class OnboardingIn(BaseModel):
     goals: list[str] = Field(default_factory=list, max_length=10)
     interests: list[str] = Field(default_factory=list, max_length=12)   # e.g. exam_prep, auto_apply, check_ins
     call_consent: bool = False
+    deadline_call_consent: bool = False
     preferred_call_window: str | None = Field(default=None, max_length=60)
 
+    @model_validator(mode="after")
+    def validate_context(self):
+        if (self.call_consent or self.deadline_call_consent) and not self.phone:
+            raise ValueError("A phone number is required for call consent")
+        if self.mode == "student" and self.profile.get("onboarding_version") == 2:
+            for key, low, high in [("daily_minutes",10,480),("salary_lpa",0,1000),("semester",1,6),("batch",2020,2040)]:
+                try: value=float(self.profile.get(key,0))
+                except (TypeError,ValueError): raise ValueError(f"Invalid {key}")
+                if not low <= value <= high: raise ValueError(f"{key} must be between {low} and {high}")
+            if not isinstance(self.profile.get("subjects"),list) or not self.profile["subjects"]:
+                raise ValueError("Select your courses")
+        return self
 
 @router.get("", summary="Onboarding state with values pre-filled from the waitlist")
 async def get_onboarding(p: Principal = Depends(get_principal)):
@@ -41,12 +55,13 @@ async def get_onboarding(p: Principal = Depends(get_principal)):
     if inst and p.mode == "student":
         data.setdefault("institution_name", inst)
     return {
-        "completed": completed is not None,
+        "completed": completed is not None and (p.mode != "student" or data.get("onboarding_version") == 2),
         "completed_at": completed,
         "prefill": {
             "full_name": user["full_name"], "email": user["email"], "phone": user["phone"], "mode": user["mode"],
             "waitlist_segment": user["waitlist_segment"], "institution": inst, "profile": data,
             "goals": prof["consent"].get("goals", []) if isinstance(prof.get("consent"), dict) else [],
+            "deadline_call_consent": bool((prof.get("consent") or {}).get("deadline_calls")),
             "call_consent": bool((prof.get("consent") or {}).get("voice_calls")),
         },
         "modes": [{"value": k, "label": v} for k, v in MODE_LABELS.items()],
@@ -60,7 +75,7 @@ async def get_onboarding(p: Principal = Depends(get_principal)):
 async def complete_onboarding(body: OnboardingIn, p: Principal = Depends(get_principal)):
     phone = calls_svc.normalize_number(body.phone) if body.phone else None
     consent = {"voice_calls": body.call_consent, "preferred_call_window": body.preferred_call_window,
-               "goals": body.goals, "interests": body.interests}
+               "goals": body.goals, "interests": body.interests, "deadline_calls": body.deadline_call_consent, "deadline_call_window": "09:00-18:00 Asia/Kolkata", "deadline_consent_at": datetime.now(UTC).isoformat() if body.deadline_call_consent else None}
     async with transaction() as conn:
         await users_repo.update_self(conn, p.id, {"full_name": body.full_name, "mode": body.mode,
                                                   **({"phone": phone} if phone else {})})

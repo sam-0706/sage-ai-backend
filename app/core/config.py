@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     omnidim_base_url: str = "https://omnidim.io/api/v1"
     omnidim_agent_id: str = ""
     omnidim_exam_agent_id: str = ""
+    omnidim_interview_agent_id: str = ""
     exam_call_expected_duration_sec: int = 300
     omnidim_from_number_id: str = ""
     omnidim_webhook_secret: str = ""

@@ -24,7 +24,7 @@ DECK_PROMPT = "deck.v1"
 ASSESS_PROMPT = "exam_assess.v1"
 
 DECK_COLS = """id, user_id, topic, level, exam, title, summary, key_concepts, quick_tips, common_mistakes, source,
-               card_count, created_at, updated_at"""
+               card_count, created_at, updated_at, coach_kind, job_context"""
 CARD_COLS = """id, deck_id, position, concept, card_type, front, back, hint, mnemonic, difficulty, ease, interval_days,
                reps, lapses, due_at, last_reviewed_at"""
 
@@ -208,13 +208,16 @@ async def preflight(user: dict, deck_id: UUID) -> dict:
     s = get_settings()
     deck = await get_deck(user["id"], deck_id)
     async with transaction() as conn:
+        if deck.get("coach_kind") == "interview":
+            from app.services.campus import feature
+            await feature(conn,user["id"],"interview_ai")
         enabled = await flags.is_enabled(conn, "voice_calls") and await flags.is_enabled(conn, "exam_prep")
         remaining = await entitlements.remaining(conn, user["id"], "voice_seconds")
         live = row(await conn.fetchrow(f"select {calls_svc.CALL_COLS} from calls where user_id = $1 and status = any($2::call_status[])",
                                        user["id"], list(calls_svc.LIVE)))
     dests = sorted(calls_svc._allowed_destinations(user.get("phone")))
     expected = s.exam_call_expected_duration_sec
-    return {"enabled": enabled and _exam_agent_configured(), "deck_id": deck_id, "topic": deck["topic"], "title": deck["title"],
+    return {"enabled": enabled and bool(s.omnidim_interview_agent_id if deck.get("coach_kind") == "interview" else s.omnidim_exam_agent_id), "deck_id": deck_id, "topic": deck["topic"], "title": deck["title"],
             "purpose": f"A {round(expected / 60)}-minute spoken quiz on {deck['title']} to find out where you stand.",
             "destinations": [{"number": d, "masked": calls_svc.mask(d)} for d in dests],
             "expected_duration_sec": expected, "estimated_minutes": round(expected / 60, 1),
@@ -229,6 +232,7 @@ def _exam_context(user: dict, deck: dict, weak: list[str]) -> dict:
     return {
         "first_name": (user.get("full_name") or "there").split(" ")[0],
         "topic": deck["topic"][:200], "deck_title": deck["title"][:200],
+        "coach_kind": deck.get("coach_kind", "study"), "job_context": json.dumps(deck.get("job_context", {}))[:10000],
         "level": deck.get("level") or "", "exam": deck.get("exam") or "",
         "key_concepts": ", ".join(k["name"] for k in deck["key_concepts"])[:600],
         "weak_concepts": ", ".join(weak)[:300] or "none recorded yet",
@@ -256,8 +260,13 @@ async def create_exam_call(user: dict, *, deck_id: UUID, destination: str, conse
     if not _exam_agent_configured():
         raise ProviderError("The exam-prep voice tutor is not configured yet", code="voice_not_configured", status_code=503)
     deck = await get_deck(user["id"], deck_id)
+    agent_id = s.omnidim_interview_agent_id if deck.get("coach_kind") == "interview" else s.omnidim_exam_agent_id
+    if not agent_id: raise ProviderError("Interview coach is not configured", code="voice_not_configured", status_code=503)
 
     async with transaction() as conn:
+        if deck.get("coach_kind") == "interview":
+            from app.services.campus import feature
+            await feature(conn,user["id"],"interview_ai")
         if not (await flags.is_enabled(conn, "voice_calls") and await flags.is_enabled(conn, "exam_prep")):
             raise FeatureDisabled("Exam-prep calls are currently disabled")
         existing = row(await conn.fetchrow(f"select {calls_svc.CALL_COLS} from calls where user_id = $1 and idempotency_key = $2",
@@ -277,7 +286,7 @@ async def create_exam_call(user: dict, *, deck_id: UUID, destination: str, conse
                 values ($1,$2,'exam_prep',$1,$3,'dispatching',$4,$5,now(),$6,$7,$8)
                 on conflict (user_id, idempotency_key) do nothing returning {calls_svc.CALL_COLS}""",
             user["id"], deck_id, idempotency_key, dest, EXAM_CONSENT_V1, s.exam_call_expected_duration_sec,
-            round(s.exam_call_expected_duration_sec / 60, 2), s.omnidim_exam_agent_id))
+            round(s.exam_call_expected_duration_sec / 60, 2), agent_id))
         if call is None:
             return row(await conn.fetchrow(f"select {calls_svc.CALL_COLS} from calls where user_id = $1 and idempotency_key = $2",
                                            user["id"], idempotency_key))
@@ -286,7 +295,7 @@ async def create_exam_call(user: dict, *, deck_id: UUID, destination: str, conse
 
     try:
         request_id = await omnidim.dispatch_call(
-            to_number=dest, call_context=_exam_context(user, deck, weak), agent_id=s.omnidim_exam_agent_id,
+            to_number=dest, call_context=_exam_context(user, deck, weak), agent_id=agent_id,
             metadata={"sage_call_id": str(call["id"]), "sage_user_id": str(user["id"]), "purpose": "exam_prep"})
     except ProviderError as e:
         definitive = e.code in ("voice_dispatch_rejected", "voice_not_configured") or e.status_code == 424

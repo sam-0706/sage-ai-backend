@@ -9,7 +9,7 @@ from app.repositories import audit
 from app.repositories.db import row, rows
 
 MODE_FIELDS = {
-    "student": ["program", "semester", "subjects", "career_goal", "availability", "institution_name", "notes"],
+    "student": ["program", "semester", "subjects", "career_goal", "availability", "institution_name", "notes", "specialisation", "batch", "section", "daily_minutes", "salary_lpa", "target_role", "preferred_locations", "skills", "experience_summary", "graduation_year", "internships_completed", "resume_summary", "onboarding_version"],
     "professional": ["target_role", "skill_goals", "courses", "weekly_availability_hours", "interview_dates",
                      "portfolio_gaps", "current_role", "notes"],
     "founder": ["venture_name", "venture_stage", "current_milestone", "customer_questions", "experiments",

@@ -9,6 +9,8 @@ from app.services import calls as calls_svc
 
 
 async def run_maintenance() -> dict:
+    from app.services.campus import check_reminders
+    reminders = await check_reminders()
     result = await calls_svc.reconcile_open_calls(limit=50)
     async with transaction() as conn:
         # retry failed extractions at most 3 attempts
@@ -21,4 +23,5 @@ async def run_maintenance() -> dict:
                                           "and created_at < now() - interval '2 days'")
     result.update({"extractions_requeued": int(retry.split()[-1]), "subscriptions_expired": int(expired.split()[-1]),
                    "orders_expired": int(stale_orders.split()[-1])})
+    result["deadline_reminders"] = reminders
     return result

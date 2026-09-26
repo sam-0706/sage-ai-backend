@@ -1,0 +1,16 @@
+"""Explicitly synthetic opportunities: no employer or institution affiliation is asserted."""
+SPECIALISATIONS = ['Entrepreneurship and Innovation','Finance and Investing','Ecommerce and Digital Leadership','Leadership and Strategy','Marketing and Consumer Insights','Operations and Supply Chain Management']
+JOBS = [
+ ('strategy-associate','job','Strategy Associate','Demo Consulting Studio',24,['strategy','analytics','presentation'],['Leadership and Strategy'],'Structure business problems, size markets and present recommendations supported by evidence.'),
+ ('product-analyst','job','Product Analyst','Demo Digital Commerce',22,['sql','analytics','product','experimentation'],['Ecommerce and Digital Leadership'],'Analyse product funnels, run experiments and work with engineering and design.'),
+ ('finance-analyst','job','Investment Analyst','Demo Capital Partners',26,['finance','valuation','excel','accounting'],['Finance and Investing'],'Build valuation models, research industries and defend investment assumptions.'),
+ ('brand-manager','job','Management Trainee — Brand','Demo Consumer Brands',18,['marketing','research','communication'],['Marketing and Consumer Insights'],'Turn customer research into positioning, campaigns and brand measurement.'),
+ ('operations-analyst','job','Supply Chain Analyst','Demo Logistics Group',20,['operations','excel','analytics','supply chain'],['Operations and Supply Chain Management'],'Model capacity and inventory, identify bottlenecks and improve service levels.'),
+ ('venture-associate','job','Venture Builder Associate','Demo Venture Lab',16,['entrepreneurship','research','sales'],['Entrepreneurship and Innovation'],'Interview customers, prototype solutions and validate demand for new ventures.'),
+ ('finance-intern','internship','Summer Finance Internship','Demo Capital Partners',0,['finance','excel'],['Finance and Investing'],'Eight-week illustrative internship: build a company model and a research memo.'),
+ ('product-intern','internship','Product Research Internship','Demo Digital Commerce',0,['product','research'],['Ecommerce and Digital Leadership'],'Illustrative internship to conduct user interviews and propose product experiments.'),
+ ('workshop-analytics','workshop','Analytics in Business — Live Workshop','Demo Campus Learning Studio',0,['analytics','sql'],[],'Demo event: work through an end-to-end funnel analysis and present your findings.'),
+ ('faculty-research','research','Faculty Research Partnership — Consumer Decisions','Demo Faculty Research Lab',0,['research','statistics','marketing'],['Marketing and Consumer Insights'],'Illustrative faculty collaboration: literature review, study design and anonymised data analysis. No actual vacancy is asserted.'),
+ ('faculty-finance','research','Faculty Research Partnership — Financial Markets','Demo Faculty Research Lab',0,['finance','statistics','python'],['Finance and Investing'],'Illustrative research project to reproduce an empirical result and document robustness checks.'),
+ ('network-strategy','networking','Industry Mentor Circle — Strategy Leaders','Demo Industry Network',0,['strategy','networking'],[],'Illustrative networking session with a strategy leader persona. Prepare three questions and a concise introduction; no real leader attendance is claimed.'),
+]

@@ -13,13 +13,13 @@ from app.repositories.db import row, rows, transaction
 
 TEST_LABEL = "TEST MODE — Razorpay test checkout. No real money is collected."
 ORDER_COLS = """id, user_id, plan_code, amount, currency, status::text as status, razorpay_order_id, razorpay_payment_id,
-                verified_at, is_test, error, created_at"""
+                verified_at, is_test, error, created_at, purpose, deadline_id"""
 
 
 async def list_plans(conn: asyncpg.Connection) -> list[dict]:
     return rows(await conn.fetch(
         """select code, name, description, price_inr_paise, price_usd_cents, period_days, voice_minutes, ai_requests,
-                  chat_messages, features, is_purchasable from billing_plans where is_active order by sort_order"""))
+                  chat_messages, autoapply_calls, features, is_purchasable from billing_plans where is_active order by sort_order"""))
 
 
 async def grant_plan(conn: asyncpg.Connection, user_id: UUID, plan_code: str, *, source: str, actor_id: UUID | None) -> dict:
@@ -62,7 +62,7 @@ async def create_order(p: Principal, plan_code: str, idempotency_key: str) -> di
             await audit.record(conn, "payment.order_created", actor_id=p.id, target_type="payment_order", target_id=order["id"],
                                metadata={"plan": plan_code, "amount": order["amount"]})
     return {
-        "order": order, "test_mode": s.razorpay_test_mode, "label": TEST_LABEL,
+        "checkout_url": await checkout_link(order["id"]), "order": order, "test_mode": s.razorpay_test_mode, "label": TEST_LABEL,
         "checkout": {"key": s.razorpay_key_id, "order_id": order["razorpay_order_id"], "amount": order["amount"], "currency": "INR",
                      "name": "SAGE AI", "description": f"{plan['name']} (test mode)",
                      "prefill": {"name": p.full_name or "", "email": p.email, "contact": p.phone or ""},
@@ -85,7 +85,10 @@ async def _settle(conn: asyncpg.Connection, order: dict, payment_id: str, source
         f"""update payment_orders set status = 'paid', razorpay_payment_id = $2, verified_at = now()
             where id = $1 and status <> 'paid' returning {ORDER_COLS}""", order["id"], payment_id))
     if updated:  # we won the race — grant
-        await grant_plan(conn, order["user_id"], order["plan_code"], source=source, actor_id=actor_id)
+        if order.get('purpose') == 'fee':
+            await conn.execute("update campus_deadlines set status='paid' where id=$1 and user_id=$2",order['deadline_id'],order['user_id'])
+        else:
+            await grant_plan(conn, order["user_id"], order["plan_code"], source=source, actor_id=actor_id)
         await audit.record(conn, "payment.verified", actor_id=actor_id, target_type="payment_order", target_id=order["id"],
                            metadata={"payment_id": payment_id, "source": source, "test": True})
         return updated
@@ -124,3 +127,25 @@ async def handle_webhook(event: dict) -> str:
 async def list_orders(user_id: UUID) -> list[dict]:
     async with transaction() as conn:
         return rows(await conn.fetch(f"select {ORDER_COLS} from payment_orders where user_id = $1 order by created_at desc", user_id))
+
+async def checkout_link(order_id):
+    import secrets,hashlib
+    ticket=secrets.token_urlsafe(32)
+    async with transaction() as c:
+        await c.execute("update payment_orders set checkout_token_hash=$2,checkout_expires_at=now()+interval '30 minutes' where id=$1",order_id,hashlib.sha256(ticket.encode()).hexdigest())
+    return get_settings().public_base_url.rstrip('/')+'/checkout#'+ticket
+
+async def create_fee_order(p,deadline_id,idempotency_key):
+    async with transaction() as c:
+        if not await flags.is_enabled(c,'payments_test_checkout'): raise FeatureDisabled('Test checkout is disabled')
+        d=row(await c.fetchrow('select * from campus_deadlines where id=$1 and user_id=$2',deadline_id,p.id))
+        if not d or d['category']=='assignment': raise NotFound('Fee not found')
+        if d['status']=='paid': raise Conflict('This fee is already paid')
+        if not d['amount']: raise AppError('Fee amount must be positive')
+        order=row(await c.fetchrow(f"insert into payment_orders(user_id,plan_code,idempotency_key,amount,currency,purpose,deadline_id) values($1,'campus_fee_test',$2,$3,'INR','fee',$4) on conflict(user_id,idempotency_key) do update set updated_at=now() returning {ORDER_COLS}",p.id,idempotency_key,d['amount'],deadline_id))
+        if order['deadline_id']!=deadline_id: raise Conflict('Idempotency key already used')
+    if not order['razorpay_order_id']:
+        rz=await razorpay.create_order(amount=order['amount'],currency='INR',receipt=str(order['id']).replace('-',''),notes={'sage_order_id':str(order['id']),'purpose':'synthetic_fee'})
+        async with transaction() as c:
+            await c.execute('update payment_orders set razorpay_order_id=$2 where id=$1',order['id'],rz['id'])
+    return {'order':order,'checkout_url':await checkout_link(order['id']),'test_mode':True,'label':'DEMO fee only; no money is paid to BITSoM.'}

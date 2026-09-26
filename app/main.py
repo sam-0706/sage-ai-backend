@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from app.api.checkout import router as checkout_router
 from app.api.device_page import router as device_page_router
 from app.api.health import router as health_router
 from app.api.v1.router import api_v1
@@ -83,6 +84,7 @@ async def root():
     return {"name": settings.app_name, "version": settings.app_version, "docs": "/docs", "api": "/v1", "health": "/health/ready"}
 
 
+app.include_router(checkout_router)
 app.include_router(health_router)
 app.include_router(device_page_router)
 app.include_router(api_v1)
